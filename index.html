@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Algoritmo CRC</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+            color: #333;
+        }
+        h1, h2 {
+            color: #2c3e50;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        h2 {
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 5px;
+            margin-top: 25px;
+        }
+        .input-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        .error {
+            color: #e74c3c;
+            font-weight: bold;
+            margin-bottom: 15px;
+        }
+        .input-error {
+            border-color: #e74c3c !important;
+        }
+        .results {
+            margin-top: 20px;
+            background-color: #f9f9f9;
+            border-radius: 4px;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+        }
+        .result-item {
+            margin-bottom: 15px;
+        }
+        .result-label {
+            font-weight: bold;
+            margin-bottom: 3px;
+        }
+        .result-value {
+            font-family: monospace;
+            font-size: 1.1em;
+            padding: 5px;
+            background-color: #f0f0f0;
+            border-radius: 3px;
+            display: inline-block;
+            min-width: 50%;
+        }
+        .status-correct {
+            color: #27ae60;
+            font-weight: bold;
+        }
+        .status-error {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+        .process {
+            margin-top: 20px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            background-color: #f0f0f0;
+            padding: 15px;
+            border-radius: 4px;
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+        }
+        small {
+            display: block;
+            margin-top: 3px;
+            color: #666;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <h1>Algoritmo CRC - Transmisor</h1>
+    
+    <div id="error" class="error"></div>
+    
+    <div class="input-group">
+        <label for="message">Trama a transmitir M(x) (binario, 16-24 bits):</label>
+        <input type="text" id="message" placeholder="Ejemplo: 1101011011001101" pattern="[01]+" 
+               title="Solo se permiten caracteres 0 y 1" required maxlength="24">
+    </div>
+    
+    <div class="input-group">
+        <label for="polynomial">Polinomio generador G(x) (binario, 4-8 bits):</label>
+        <input type="text" id="polynomial" placeholder="Ejemplo: 10011" pattern="[01]+" 
+               title="Solo se permiten caracteres 0 y 1" required maxlength="8">
+    </div>
+    
+    <button id="calculate">Calcular</button>
+    
+    <div id="results" class="results" style="display: none;">
+        <h2>Resultados</h2>
+        
+        <div class="result-item">
+            <div class="result-label">Trama original M(x):</div>
+            <div class="result-value" id="original-message"></div>
+        </div>
+        
+        <div class="result-item">
+            <div class="result-label">Polinomio generador G(x):</div>
+            <div class="result-value" id="display-polynomial"></div>
+        </div>
+        
+        <div class="result-item">
+            <div class="result-label">Grado del polinomio (r):</div>
+            <div class="result-value" id="polynomial-degree"></div>
+        </div>
+        
+        <div class="result-item">
+            <div class="result-label">xʳM(x):</div>
+            <div class="result-value" id="extended-message"></div>
+        </div>
+        
+        <div class="result-item">
+            <div class="result-label">Resto de la división R(x):</div>
+            <div class="result-value" id="crc-result"></div>
+        </div>
+        
+        <div class="result-item">
+            <div class="result-label">Trama transmitida T(x):</div>
+            <div class="result-value" id="transmitted-message"></div>
+        </div>
+        
+        <div class="result-item">
+            <div class="result-label">Resto de verificación:</div>
+            <div class="result-value" id="verification-result"></div>
+        </div>
+        
+        <div class="result-item">
+            <div class="result-label">Estado de la trama:</div>
+            <div id="error-status" class="result-value"></div>
+        </div>
+    </div>
+    
+    <div id="process" class="process" style="display: none;"></div>
+
+    <script>
+        document.getElementById('calculate').addEventListener('click', function () {
+            const messageInput = document.getElementById('message');
+            const polynomialInput = document.getElementById('polynomial');
+            const errorDiv = document.getElementById('error');
+            const resultsDiv = document.getElementById('results');
+            const processDiv = document.getElementById('process');
+
+            errorDiv.textContent = '';
+            resultsDiv.style.display = 'none';
+            processDiv.innerHTML = '';
+            processDiv.style.display = 'none';
+            messageInput.classList.remove('input-error');
+            polynomialInput.classList.remove('input-error');
+
+            const message = messageInput.value.trim();
+            const polynomial = polynomialInput.value.trim();
+
+            let isValid = true;
+            let errorMessage = '';
+
+            if (!message || !polynomial) {
+                errorMessage = 'Ambos campos son obligatorios.';
+                if (!message) messageInput.classList.add('input-error');
+                if (!polynomial) polynomialInput.classList.add('input-error');
+                isValid = false;
+            }
+
+            if (isValid) {
+                if (!/^[01]+$/.test(message)) {
+                    errorMessage = 'La trama M(x) solo puede contener 0s y 1s.';
+                    messageInput.classList.add('input-error');
+                    isValid = false;
+                }
+                if (!/^[01]+$/.test(polynomial)) {
+                    errorMessage = 'El polinomio G(x) solo puede contener 0s y 1s.';
+                    polynomialInput.classList.add('input-error');
+                    isValid = false;
+                }
+            }
+
+            if (isValid) {
+                if (message.length < 16 || message.length > 24) {
+                    errorMessage = `La trama M(x) debe tener entre 16 y 24 bits (ingresaste ${message.length} bits).`;
+                    messageInput.classList.add('input-error');
+                    isValid = false;
+                }
+                if (polynomial.length < 4 || polynomial.length > 8) {
+                    errorMessage = `El polinomio G(x) debe tener entre 4 y 8 bits (ingresaste ${polynomial.length} bits).`;
+                    polynomialInput.classList.add('input-error');
+                    isValid = false;
+                }
+            }
+
+            if (isValid && polynomial.match(/^0+$/)) {
+                errorMessage = 'El polinomio generador no puede ser todo ceros.';
+                polynomialInput.classList.add('input-error');
+                isValid = false;
+            }
+
+            if (isValid && (polynomial[0] !== '1' || polynomial[polynomial.length - 1] !== '1')) {
+                errorMessage = 'El polinomio generador debe comenzar y terminar con 1 (ej: 10011).';
+                polynomialInput.classList.add('input-error');
+                isValid = false;
+            }
+
+            if (!isValid) {
+                errorDiv.textContent = errorMessage;
+                return;
+            }
+
+            const processSteps = [];
+            const { Tx, Rx, verificationRemainder, errorDetected, xrMx } = calculateCRCWithVerification(message, polynomial, processSteps);
+
+            document.getElementById('original-message').textContent = message;
+            document.getElementById('display-polynomial').textContent = polynomial;
+            document.getElementById('polynomial-degree').textContent = polynomial.length - 1;
+            document.getElementById('extended-message').textContent = xrMx;
+            document.getElementById('crc-result').textContent = Rx;
+            document.getElementById('transmitted-message').textContent = Tx;
+            document.getElementById('verification-result').textContent = verificationRemainder;
+
+            const statusDiv = document.getElementById('error-status');
+            if (!errorDetected) {
+                statusDiv.innerHTML = '<span class="status-correct">✓ Trama correcta (no se detectaron errores)</span>';
+            } else {
+                statusDiv.innerHTML = '<span class="status-error">✗ Error detectado en la trama</span>';
+            }
+
+            resultsDiv.style.display = 'block';
+            displayProcessSteps(processSteps, processDiv);
+            processDiv.style.display = 'block';
+        });
+
+        function calculateCRCWithVerification(message, polynomial, processSteps) {
+            const r = polynomial.length - 1;
+            const xrMx = message + '0'.repeat(r);
+
+            let remainder = xrMx.substring(0, polynomial.length);
+            processSteps.push(`1. Cálculo de R(x):`);
+            processSteps.push(`   - xʳM(x): ${xrMx}`);
+            processSteps.push(`   - G(x): ${polynomial}`);
+            processSteps.push(`   - Dividendo inicial: ${remainder}`);
+
+            for (let i = polynomial.length; i <= xrMx.length; i++) {
+                if (remainder[0] === '1') {
+                    let newRemainder = '';
+                    for (let j = 1; j < polynomial.length; j++) {
+                        newRemainder += remainder[j] === polynomial[j] ? '0' : '1';
+                    }
+                    if (i < xrMx.length) {
+                        newRemainder += xrMx[i];
+                        processSteps.push(`   Paso ${i - polynomial.length + 1}: XOR con ${polynomial} + bit ${xrMx[i]} → ${newRemainder}`);
+                    } else {
+                        processSteps.push(`   Paso ${i - polynomial.length + 1}: XOR con ${polynomial} → ${newRemainder}`);
+                    }
+                    remainder = newRemainder;
+                } else {
+                    let newRemainder = remainder.substring(1);
+                    if (i < xrMx.length) {
+                        newRemainder += xrMx[i];
+                        processSteps.push(`   Paso ${i - polynomial.length + 1}: Desplazar + bit ${xrMx[i]} → ${newRemainder}`);
+                    } else {
+                        processSteps.push(`   Paso ${i - polynomial.length + 1}: Desplazar → ${newRemainder}`);
+                    }
+                    remainder = newRemainder;
+                }
+            }
+
+            while (remainder.length < r) remainder = '0' + remainder;
+            processSteps.push(`   - Resto final R(x): ${remainder}`);
+
+            let Tx = '';
+            processSteps.push(`\n2. Cálculo de T(x) = xʳM(x) - R(x):`);
+            processSteps.push(`   - xʳM(x): ${xrMx}`);
+            processSteps.push(`   - R(x):   ${'0'.repeat(xrMx.length - remainder.length)}${remainder}`);
+
+            for (let i = 0; i < xrMx.length; i++) {
+                const bitM = parseInt(xrMx[i]);
+                const bitR = i >= xrMx.length - remainder.length ? parseInt(remainder[i - (xrMx.length - remainder.length)]) : 0;
+                Tx += (bitM ^ bitR).toString();
+            }
+            processSteps.push(`   - T(x):   ${Tx}`);
+
+            processSteps.push(`\n3. Verificación [T(x) / G(x)]:`);
+            let verificationRemainder = Tx.substring(0, polynomial.length);
+            processSteps.push(`   - Dividendo inicial: ${verificationRemainder}`);
+
+            for (let i = polynomial.length; i <= Tx.length; i++) {
+                if (verificationRemainder[0] === '1') {
+                    let newRemainder = '';
+                    for (let j = 1; j < polynomial.length; j++) {
+                        newRemainder += verificationRemainder[j] === polynomial[j] ? '0' : '1';
+                    }
+                    if (i < Tx.length) {
+                        newRemainder += Tx[i];
+                        processSteps.push(`   Paso ${i - polynomial.length + 1}: XOR con ${polynomial} + bit ${Tx[i]} → ${newRemainder}`);
+                    } else {
+                        processSteps.push(`   Paso ${i - polynomial.length + 1}: XOR con ${polynomial} → ${newRemainder}`);
+                    }
+                    verificationRemainder = newRemainder;
+                } else {
+                    let newRemainder = verificationRemainder.substring(1);
+                    if (i < Tx.length) {
+                        newRemainder += Tx[i];
+                        processSteps.push(`   Paso ${i - polynomial.length + 1}: Desplazar + bit ${Tx[i]} → ${newRemainder}`);
+                    } else {
+                        processSteps.push(`   Paso ${i - polynomial.length + 1}: Desplazar → ${newRemainder}`);
+                    }
+                    verificationRemainder = newRemainder;
+                }
+            }
+
+            while (verificationRemainder.length < r) verificationRemainder = '0' + verificationRemainder;
+            processSteps.push(`   - Resto final: ${verificationRemainder}`);
+
+            return {
+                Tx,
+                Rx: remainder,
+                verificationRemainder,
+                errorDetected: verificationRemainder !== '0'.repeat(r),
+                xrMx
+            };
+        }
+
+        function displayProcessSteps(processSteps, container) {
+            container.innerHTML = processSteps.join('\n');
+        }
+
+        document.getElementById('message').addEventListener('input', function (e) {
+            this.value = this.value.replace(/[^01]/g, '');
+        });
+
+        document.getElementById('polynomial').addEventListener('input', function (e) {
+            this.value = this.value.replace(/[^01]/g, '');
+        });
+    </script>
+</body>
+</html>
